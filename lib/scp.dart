@@ -4,7 +4,7 @@ import 'package:fl_build/cfg/config.dart';
 import 'package:fl_build/res.dart';
 import 'package:fl_build/target.dart';
 
-const SCP_PATH = 'hel:/var/www/res/';
+const SCP_PATH = String.fromEnvironment('FLBUILD_SCP_PATH', defaultValue: 'hsk:/var/www/res/');
 
 abstract final class Scps {
   static const supportedTargets = [Target.android, Target.linux, Target.win];
