@@ -23,8 +23,31 @@ final _commitCount = () {
   // - Before pushing, ver = 1.
   // - After pushing, ver = 2, but the version wrote in remote file is still 1.
   // So, we need to increment the version by 1 to correctly match the version.
+  //
+  // BUT this only holds when a new bump commit is about to be created (the
+  // local bump flow). When fl_build runs again on an already-bumped commit
+  // (e.g. CI release on a pushed tag), there is no upcoming commit, so adding
+  // +1 would overshoot the tag by one. Detect that case: if HEAD already
+  // records a build number equal to its own commit count, it is a finalized
+  // release commit -> use the count as-is.
+  if (_committedBuildNumber() == val) return val;
   return val + 1;
 }();
+
+/// Build number recorded in the build data file at HEAD (the committed value,
+/// independent of any working-tree changes fl_build may write during a build).
+///
+/// Returns `null` when it cannot be determined (e.g. the file is not tracked).
+int? _committedBuildNumber() {
+  final result = Process.runSync(
+    'git',
+    ['show', 'HEAD:${makeCfg.buildDataPath}'],
+  );
+  if (result.exitCode != 0) return null;
+  final match =
+      RegExp(r'build = (\d+);').firstMatch(result.stdout.toString());
+  return int.tryParse(match?.group(1) ?? '');
+}
 
 /// commit + push + gita_tag_push
 Future<void> gitSubmmit() async {
