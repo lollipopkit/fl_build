@@ -132,7 +132,11 @@ Future<void> setupLinuxDir() async {
     printRed('No app_icon.png found in assets.');
     exit(1);
   }
-  await Process.run('cp', [appIconPath, LINUX_APP_DIR]);
+  final copy = await Process.run('cp', [appIconPath, LINUX_APP_DIR]);
+  if (copy.exitCode != 0) {
+    print(copy.stderr);
+    exit(copy.exitCode);
+  }
 
   // Create AppRun
   final appRun = '''
@@ -144,7 +148,11 @@ exec ./bundle/$appName
   await File(appRunPath).writeAsString(appRun);
 
   // chmod +x AppRun
-  await Process.run('chmod', ['+x', appRunPath]);
+  final chmod = await Process.run('chmod', ['+x', appRunPath]);
+  if (chmod.exitCode != 0) {
+    print(chmod.stderr);
+    exit(chmod.exitCode);
+  }
 
   // Create .desktop
   final desktop = '''
