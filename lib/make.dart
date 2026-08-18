@@ -54,8 +54,8 @@ abstract final class Maker {
       buildType,
       '--build-number=$buildDataVersion',
       '--build-name=1.0.$buildDataVersion',
-      if (customArgs != null) ...customArgs,
-      if (makeCfgArgs != null) ...makeCfgArgs,
+       ...?customArgs,
+       ...?makeCfgArgs,
       ...passthroughArgs,
     ];
 
