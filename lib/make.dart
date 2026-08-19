@@ -54,8 +54,8 @@ abstract final class Maker {
       buildType,
       '--build-number=$buildDataVersion',
       '--build-name=1.0.$buildDataVersion',
-      if (customArgs != null) ...customArgs,
-      if (makeCfgArgs != null) ...makeCfgArgs,
+      ...?customArgs,
+      ...?makeCfgArgs,
       ...passthroughArgs,
     ];
 
@@ -81,46 +81,67 @@ abstract final class Maker {
   }
 
   static Future<MakeResult?> flutterBuildAndroid({List<String> passthroughArgs = const []}) async {
+    final apkDir = Directory(APK_DIR);
+    if (await apkDir.exists()) {
+      await for (final entity in apkDir.list()) {
+        if (entity is File && entity.path.endsWith('.apk')) await entity.delete();
+      }
+    }
     await _flutterBuild('apk', customArgs: ['--split-per-abi'], passthroughArgs: passthroughArgs);
 
-    // {originName: newName}
-    final namesMap = {
-      'app-arm64-v8a-release.apk': '${appName}_${buildDataVersion}_arm64.apk',
-      'app-armeabi-v7a-release.apk': '${appName}_${buildDataVersion}_arm.apk',
-      'app-x86_64-release.apk': '${appName}_${buildDataVersion}_amd64.apk',
+    final abiNames = {
+      'arm64-v8a': '${appName}_${buildDataVersion}_arm64.apk',
+      'armeabi-v7a': '${appName}_${buildDataVersion}_arm.apk',
+      'x86_64': '${appName}_${buildDataVersion}_amd64.apk',
     };
-    for (final entry in namesMap.entries) {
-      final origin = entry.key;
-      final newName = entry.value;
+    final generated = (await apkDir.list().toList()).where((entity) {
+      if (entity is! File || !entity.path.endsWith('.apk')) return false;
+      final name = entity.uri.pathSegments.last;
+      return abiNames.keys.any((abi) => name.contains('-$abi-'));
+    });
+    final pkgPaths = <String>[];
+    for (final entity in generated) {
+      final file = entity as File;
+      final name = file.uri.pathSegments.last;
+      final abi = abiNames.keys.firstWhere((abi) => name.contains('-$abi-'));
+      final newName = abiNames[abi]!;
       // Use copy, so that the shell history will only retain the record `adb
       // install build/app/outputs/flutter-apk/app-arm64-v8a-release.apk`
-      await File('$APK_DIR$origin').copy('$APK_DIR$newName');
+      final path = '$APK_DIR$newName';
+      await file.copy(path);
+      pkgPaths.add(path);
     }
+    if (pkgPaths.isEmpty) throw StateError('No split APKs were generated.');
 
-    return MakeResult(
-      pkgPath: namesMap.values.map((e) => '$APK_DIR$e').toList(),
-    );
+    return MakeResult(pkgPath: pkgPaths);
   }
 
   static Future<MakeResult?> flutterBuildLinux({List<String> passthroughArgs = const []}) async {
+    if (!Platform.isLinux) throw UnsupportedError('Linux builds require a Linux host.');
     await installLinuxEnv();
     await setupLinuxDir();
     await _flutterBuild('linux', passthroughArgs: passthroughArgs);
     // cp -r build/linux/x64/release/bundle/* appName.AppDir
-    await Process.run('cp', [
+    final copy = await Process.run('cp', [
       '-r',
       'build/linux/x64/release/bundle',
       LINUX_APP_DIR,
     ]);
+    if (copy.exitCode != 0) {
+      print(copy.stderr);
+      exit(copy.exitCode);
+    }
     // Run appimagetool
+    final pkgPath = '${appName}_${buildDataVersion}_amd64.AppImage';
     final appimg = await Process.run(
       'appimagetool',
       [
         LINUX_APP_DIR,
+        pkgPath,
         '--runtime-file',
         APPIMAGE_RUNTIME_FILE,
       ],
-      environment: {'ARCH': 'x86_64'},
+      environment: {...Platform.environment, 'ARCH': 'x86_64'},
     );
     if (appimg.exitCode != 0) {
       print(appimg.stdout);
@@ -128,8 +149,6 @@ abstract final class Maker {
       exit(appimg.exitCode);
     }
 
-    final pkgPath = '${appName}_${buildDataVersion}_amd64.AppImage';
-    await File('$appName-x86_64.AppImage').rename(pkgPath);
     return MakeResult(pkgPath: [pkgPath]);
   }
 
@@ -137,6 +156,7 @@ abstract final class Maker {
     await _flutterBuild('windows', passthroughArgs: passthroughArgs);
 
     final pkgPath = '${appName}_${buildDataVersion}_windows_amd64.zip';
+    final tempPath = '$pkgPath.$pid.tmp.zip';
     final buildPath = 'build\\windows\\x64\\runner\\Release\\*';
 
     //print("Creating zip archive to $pkgPath ...");
@@ -146,15 +166,20 @@ abstract final class Maker {
       '-Path',
       buildPath,
       '-DestinationPath',
-      pkgPath,
-      '-Force'
+      tempPath,
     ]);
 
     //print("Archive creator returned with code: ${result.exitCode}");
     if (result.exitCode != 0) {
       print(result.stdout);
       print(result.stderr);
-      return MakeResult(pkgPath: []);
+      exit(result.exitCode);
+    }
+    try {
+      await File(tempPath).rename(pkgPath);
+    } on FileSystemException catch (e) {
+      print(e);
+      exit(1);
     }
 
     return MakeResult(pkgPath: [pkgPath]);
