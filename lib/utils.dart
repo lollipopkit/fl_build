@@ -124,7 +124,14 @@ Future<void> changeAppleVersion() async {
 }
 
 Future<void> setupLinuxDir() async {
-  await Directory(LINUX_APP_DIR).create();
+  // Emptied rather than reused. The layout changed once already — the bundle
+  // used to be copied in as a `bundle/` subdirectory — and a rebuild over the
+  // previous shape leaves that directory behind for appimagetool to pack a
+  // second, stale copy of the app into. CI starts clean; a developer's machine
+  // does not.
+  final appDir = Directory(LINUX_APP_DIR);
+  if (await appDir.exists()) await appDir.delete(recursive: true);
+  await appDir.create();
 
   // cp -r assets/app_icon.png linux.AppDir
   const appIconPath = 'assets/app_icon.png';
@@ -139,10 +146,13 @@ Future<void> setupLinuxDir() async {
   }
 
   // Create AppRun
+  // Beside `AppRun`, not under `bundle/`: the build copies the bundle's
+  // contents to the AppDir root, which is also what makes `Exec=$appName` in
+  // the desktop file below name a real path.
   final appRun = '''
 #!/bin/sh
 cd "\$(dirname "\$0")"
-exec ./bundle/$appName
+exec ./$appName
 ''';
   const appRunPath = '$LINUX_APP_DIR/AppRun';
   await File(appRunPath).writeAsString(appRun);

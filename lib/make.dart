@@ -121,10 +121,17 @@ abstract final class Maker {
     await installLinuxEnv();
     await setupLinuxDir();
     await _flutterBuild('linux', passthroughArgs: passthroughArgs);
-    // cp -r build/linux/x64/release/bundle/* appName.AppDir
+    // The bundle's *contents* go to the AppDir root, so the executable sits
+    // beside `AppRun` and the `.desktop` file's `Exec=<appName>` names
+    // something that is actually there.
+    //
+    // `bundle/.` rather than `bundle/*`, which is what the comment here used to
+    // say: `Process.run` starts `cp` directly, with no shell to expand a glob,
+    // so `*` would have been a literal path. Dropping it made the copy work and
+    // nested the whole bundle one level down instead.
     final copy = await Process.run('cp', [
       '-r',
-      'build/linux/x64/release/bundle',
+      'build/linux/x64/release/bundle/.',
       LINUX_APP_DIR,
     ]);
     if (copy.exitCode != 0) {
