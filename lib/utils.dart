@@ -172,7 +172,7 @@ Future<void> installLinuxEnv() async {
   final result = await Process.run('which', ['appimagetool']);
   if (result.exitCode != 0) {
     printBlue('appimagetool is not installed. Installing...');
-    const url = '$APPIMAGE_DL_URL/appimagetool-x86_64.AppImage';
+    const url = APPIMAGE_TOOL_URL;
     final dl = await Process.run(
       'sudo',
       ['wget', '-O', APPIMAGE_FILE, url],
@@ -194,7 +194,7 @@ Future<void> installLinuxEnv() async {
   final appimageRuntime = File(APPIMAGE_RUNTIME_FILE);
   if (!await appimageRuntime.exists()) {
     printBlue('Downloading $APPIMAGE_RUNTIME_FILE...');
-    const url = '$APPIMAGE_DL_URL/runtime-fuse3-x86_64';
+    const url = APPIMAGE_RUNTIME_URL;
     final mkdir = await Process.run(
       'sudo',
       ['mkdir', '-p', APPIMAGE_RUNTIME_DIR]
