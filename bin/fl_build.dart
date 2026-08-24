@@ -1,7 +1,6 @@
 #!/usr/bin/env dart
 // ignore_for_file: avoid_print, non_constant_identifier_names, constant_identifier_names
 
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:fl_build/cfg/config.dart';
@@ -10,6 +9,7 @@ import 'package:fl_build/res.dart';
 import 'package:fl_build/scp.dart';
 import 'package:fl_build/target.dart';
 import 'package:fl_build/utils.dart';
+import 'package:yaml/yaml.dart';
 
 void main(List<String> args) async {
   final params = <String, String?>{};
@@ -37,15 +37,7 @@ void main(List<String> args) async {
     }
   }
 
-  final file = File(params['-c'] ?? 'fl_build.json');
-  if (await file.exists()) {
-    final content = await file.readAsString();
-    final config = json.decode(content) as Map<String, dynamic>;
-    makeCfg = MakeCfg.fromJson(config);
-  } else {
-    printMegenta('Make config is required: ${file.path}');
-    exit(1);
-  }
+  makeCfg = await _loadCfg();
 
   // Before build
   final beforeBuild = makeCfg.beforeBuild;
@@ -103,4 +95,39 @@ void main(List<String> args) async {
       exit(1);
     }
   }
+}
+
+/// The build config: the `fl_build:` section of `pubspec.yaml`.
+///
+/// One place, and one this project already has. It was a `fl_build.json` of
+/// its own, which for most projects is a file carrying a single app name — and
+/// a second file is a second thing to keep level with the first, since the
+/// pubspec is where the version and the assets are declared anyway.
+Future<MakeCfg> _loadCfg() async {
+  final pubspec = File('pubspec.yaml');
+  if (await pubspec.exists()) {
+    final doc = loadYaml(await pubspec.readAsString());
+    final section = doc is YamlMap ? doc['fl_build'] : null;
+    if (section is YamlMap) return MakeCfg.fromJson(_plain(section));
+  }
+
+  printMegenta(
+    'No build config: pubspec.yaml needs an `fl_build:` section, with at '
+    'least `appName`.',
+  );
+  exit(1);
+}
+
+/// A YAML subtree as the plain maps and lists the generated decoder wants.
+///
+/// `YamlMap` is a `Map` and `YamlList` is a `List`, so the outer cast would
+/// pass and the first nested value would then fail one — which reads as the
+/// config being malformed rather than as the wrong kind of map.
+Map<String, dynamic> _plain(YamlMap map) {
+  Object? value(Object? node) => switch (node) {
+    YamlMap map => _plain(map),
+    YamlList list => [for (final item in list) value(item)],
+    _ => node,
+  };
+  return {for (final e in map.entries) e.key.toString(): value(e.value)};
 }
