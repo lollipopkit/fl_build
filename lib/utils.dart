@@ -15,14 +15,12 @@ extension IterX<T> on Iterable<T> {
   }
 }
 
-/// Only can be used in local. If you want to read version at remote (Github
-/// Actions), use [buildDataVersion] instead.
+/// The local commit count. Use [buildDataVersion] in GitHub Actions.
 final _commitCount = () {
   final result = Process.runSync('git', ['rev-list', '--count', 'HEAD']);
   final val = int.tryParse(result.stdout.toString().trim()) ?? 0;
-  // - Before pushing, ver = 1.
-  // - After pushing, ver = 2, but the version wrote in remote file is still 1.
-  // So, we need to increment the version by 1 to correctly match the version.
+  // The local release flow creates the version bump as the next commit, so its
+  // build number is one greater than the current commit count.
   //
   // BUT this only holds when a new bump commit is about to be created (the
   // local bump flow). When fl_build runs again on an already-bumped commit
@@ -49,7 +47,7 @@ int? _committedBuildNumber() {
   return int.tryParse(match?.group(1) ?? '');
 }
 
-/// commit + push + gita_tag_push
+/// Commits the working tree, pushes it, and creates the release tag.
 Future<void> gitSubmmit() async {
   final addConfirm = await askConfirm('Add all changes?');
   if (addConfirm != true) return;
