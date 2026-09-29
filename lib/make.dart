@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:archive/archive_io.dart';
 import 'package:fl_build/cfg/config.dart';
 import 'package:fl_build/target.dart';
 import 'package:fl_build/res.dart';
@@ -93,8 +94,9 @@ abstract final class Maker {
     final apkDir = Directory(APK_DIR);
     if (await apkDir.exists()) {
       await for (final entity in apkDir.list()) {
-        if (entity is File && entity.path.endsWith('.apk'))
+        if (entity is File && entity.path.endsWith('.apk')) {
           await entity.delete();
+        }
       }
     }
     await _flutterBuild(
@@ -133,8 +135,9 @@ abstract final class Maker {
   static Future<MakeResult?> flutterBuildLinux({
     List<String> passthroughArgs = const [],
   }) async {
-    if (!Platform.isLinux)
+    if (!Platform.isLinux) {
       throw UnsupportedError('Linux builds require a Linux host.');
+    }
     await installLinuxEnv();
     await setupLinuxDir();
     await _flutterBuild('linux', passthroughArgs: passthroughArgs);
@@ -178,29 +181,23 @@ abstract final class Maker {
 
     final pkgPath = '${appName}_${buildDataVersion}_windows_amd64.zip';
     final tempPath = '$pkgPath.$pid.tmp.zip';
-    final buildPath = 'build\\windows\\x64\\runner\\Release\\*';
+    final release = Directory(r'build\windows\x64\runner\Release');
 
-    //print("Creating zip archive to $pkgPath ...");
-
-    final result = await Process.run('powershell', [
-      '-NoProfile',
-      '-NonInteractive',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-Command',
-      'Import-Module Microsoft.PowerShell.Archive; Compress-Archive',
-      '-Path',
-      buildPath,
-      '-DestinationPath',
-      tempPath,
-    ]);
-
-    //print("Archive creator returned with code: ${result.exitCode}");
-    if (result.exitCode != 0) {
-      print(result.stdout);
-      print(result.stderr);
-      exit(result.exitCode);
+    // Written here rather than by Windows PowerShell's `Compress-Archive`,
+    // which stores entry names with `\` — against the zip spec, and unzipped
+    // elsewhere into flat files named `data\app.so`. `ZipFileEncoder` writes
+    // `/`.
+    final encoder = ZipFileEncoder()..create(tempPath);
+    try {
+      encoder.addDirectorySync(
+        release,
+        includeDirName: false,
+        followLinks: false,
+      );
+    } finally {
+      await encoder.close();
     }
+
     try {
       await File(tempPath).rename(pkgPath);
     } on FileSystemException catch (e) {
