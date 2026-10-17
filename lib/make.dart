@@ -177,11 +177,16 @@ abstract final class Maker {
   static Future<MakeResult?> flutterBuildWin({
     List<String> passthroughArgs = const [],
   }) async {
+    final architecture = _windowsArchitecture(passthroughArgs);
     await _flutterBuild('windows', passthroughArgs: passthroughArgs);
 
-    final pkgPath = '${appName}_${buildDataVersion}_windows_amd64.zip';
+    final packageArchitecture = architecture == 'x64' ? 'amd64' : architecture;
+    final pkgPath =
+        '${appName}_${buildDataVersion}_windows_$packageArchitecture.zip';
     final tempPath = '$pkgPath.$pid.tmp.zip';
-    final release = Directory(r'build\windows\x64\runner\Release');
+    final release = Directory(
+      'build\\windows\\$architecture\\runner\\Release',
+    );
 
     // Written here rather than by Windows PowerShell's `Compress-Archive`,
     // which stores entry names with `\` — against the zip spec, and unzipped
@@ -206,5 +211,30 @@ abstract final class Maker {
     }
 
     return MakeResult(pkgPath: [pkgPath]);
+  }
+
+  static String _windowsArchitecture(List<String> passthroughArgs) {
+    final configuredArgs = makeCfg.customArgs['windows'] ?? const [];
+    final args = [...configuredArgs, ...passthroughArgs];
+    String? targetPlatform;
+
+    for (var i = 0; i < args.length; i++) {
+      final arg = args[i];
+      if (arg.startsWith('--target-platform=')) {
+        targetPlatform = arg.substring('--target-platform='.length);
+      } else if (arg == '--target-platform' && i + 1 < args.length) {
+        targetPlatform = args[++i];
+      }
+    }
+
+    return switch (targetPlatform) {
+      null || 'windows-x64' => 'x64',
+      'windows-arm64' => 'arm64',
+      _ => throw ArgumentError.value(
+        targetPlatform,
+        '--target-platform',
+        'Expected windows-x64 or windows-arm64.',
+      ),
+    };
   }
 }
