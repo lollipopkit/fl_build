@@ -8,6 +8,9 @@ const MORE_BUILD_DATA_PATH = 'more_build_data.json';
 const JSON_ENCODER = JsonEncoder.withIndent('  ');
 const LINUX_APP_DIR = 'linux.AppDir';
 const APK_DIR = 'build/app/outputs/flutter-apk/';
+
+/// Inno Setup script; a project without one ships the zip alone.
+const WIN_INSTALLER_SCRIPT = 'windows/installer.iss';
 const XCODE_CFG_PATH = 'Runner.xcodeproj/project.pbxproj';
 const SHELL_SCRIPT_PATH = 'lib/data/model/app/shell_func.dart';
 

@@ -205,6 +205,52 @@ abstract final class Maker {
       exit(1);
     }
 
-    return MakeResult(pkgPath: [pkgPath]);
+    final installer = await _innoSetup(release);
+    return MakeResult(pkgPath: [pkgPath, ?installer]);
+  }
+
+  /// Compiles [WIN_INSTALLER_SCRIPT] against [release], when the project has
+  /// one, into `<appName>_<build>_windows_amd64.exe`.
+  ///
+  /// The script gets `AppName`, `AppVersion`, `SourceDir`, `OutputDir` and
+  /// `OutputBaseFilename` as `/D` defines.
+  static Future<String?> _innoSetup(Directory release) async {
+    final script = File(WIN_INSTALLER_SCRIPT);
+    if (!await script.exists()) return null;
+
+    final base = '${appName}_${buildDataVersion}_windows_amd64';
+    final args = [
+      '/Q',
+      '/DAppName=$appName',
+      '/DAppVersion=1.0.$buildDataVersion',
+      '/DSourceDir=${release.absolute.path}',
+      '/DOutputDir=${Directory.current.path}',
+      '/DOutputBaseFilename=$base',
+      script.absolute.path,
+    ];
+    final iscc = _isccPath();
+    print('\n[windows installer]\n$iscc ${args.join(' ')}');
+    final result = await Process.run(iscc, args, runInShell: iscc == 'iscc');
+    if (result.exitCode != 0) {
+      print(result.stdout);
+      print(result.stderr);
+      exit(result.exitCode);
+    }
+    return '$base.exe';
+  }
+
+  /// `ISCC` env, then where Inno Setup 6 installs, then `PATH`.
+  static String _isccPath() {
+    final env = Platform.environment;
+    final candidates = [
+      ?env['ISCC'],
+      for (final root in [
+        env['ProgramFiles(x86)'],
+        env['ProgramFiles'],
+        if (env['LOCALAPPDATA'] case final local?) '$local\\Programs',
+      ])
+        if (root != null) '$root\\Inno Setup 6\\ISCC.exe',
+    ];
+    return candidates.firstWhereOrNull((p) => File(p).existsSync()) ?? 'iscc';
   }
 }
